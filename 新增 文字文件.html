@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>玩具城電梯時間</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .app {
+      background: rgba(15,23,42,0.9);
+      border-radius: 20px;
+      padding: 24px 20px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      border: 1px solid rgba(148,163,184,0.5);
+    }
+
+    .title {
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-bottom: 16px;
+    }
+
+    .mode-switch {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      background: #020617;
+      padding: 4px;
+      border-radius: 999px;
+    }
+
+    .mode-btn {
+      flex: 1;
+      border: none;
+      padding: 8px 0;
+      border-radius: 999px;
+      background: transparent;
+      color: #9ca3af;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .mode-btn.active {
+      background: linear-gradient(135deg,#22c55e,#2dd4bf);
+      color: #020617;
+      font-weight: 600;
+      box-shadow: 0 0 18px rgba(45,212,191,0.6);
+    }
+
+    .info-card {
+      background: #020617;
+      border-radius: 16px;
+      padding: 16px 14px;
+      border: 1px solid #1f2937;
+      margin-bottom: 16px;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+
+    .label {
+      font-size: 0.85rem;
+      color: #9ca3af;
+    }
+
+    .value {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .value-large {
+      font-size: 1.4rem;
+    }
+
+    .hint {
+      font-size: 0.85rem;
+      color: #6b7280;
+      margin-top: 8px;
+    }
+
+    .alert {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      background: radial-gradient(circle at top, #f97316, #b91c1c);
+      color: #fefce8;
+      font-weight: 700;
+      text-align: center;
+      font-size: 1rem;
+      opacity: 0;
+      transform: scale(0.9);
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      box-shadow: 0 0 25px rgba(248,113,113,0.7);
+    }
+
+    .alert.show {
+      opacity: 1;
+      transform: scale(1);
+      animation: pulse 0.6s ease-in-out 2;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); box-shadow: 0 0 16px rgba(248,113,113,0.8); }
+      50% { transform: scale(1.06); box-shadow: 0 0 30px rgba(248,113,113,1); }
+      100% { transform: scale(1); box-shadow: 0 0 16px rgba(248,113,113,0.8); }
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="app">
+  <div class="title">玩具城電梯時間</div>
+  <div class="subtitle">每4分鐘一班・自動提醒與提示音</div>
+
+  <div class="mode-switch">
+    <button id="downBtn" class="mode-btn active">下行</button>
+    <button id="upBtn" class="mode-btn">上行</button>
+  </div>
+
+  <div class="info-card">
+    <div class="info-row">
+      <div class="label">目前模式</div>
+      <div id="modeLabel" class="value">下行（每小時 00 分起，每 4 分鐘）</div>
+    </div>
+    <div class="info-row">
+      <div class="label">下一班到站時間</div>
+      <div id="nextTime" class="value value-large">--:--</div>
+    </div>
+    <div class="info-row">
+      <div class="label">距離到站倒數</div>
+      <div id="countdown" class="value">-- 秒</div>
+    </div>
+
+    <div id="alert" class="alert">
+      電梯到站囉！請準備搭乘 🚪
+    </div>
+
+    <div class="hint">
+      🔔 提示：第一次請點選按鈕以啟用音效。
+    </div>
+  </div>
+
+  <div class="footer">
+    下行：每小時 00 / 04 / 08 ... 56　｜　上行：02 / 06 / 10 ... 58
+  </div>
+</div>
+
+<!-- 🔊 無版權音效（一定可用） -->
+<audio id="ding" preload="auto" playsinline muted>
+  <source src="https://assets.mixkit.co/active_storage/sfx/2574/2574-preview.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+  let currentDirection = 'down';
+  let nextArrival = null;
+  let timer = null;
+  let alertTimeout = null;
+
+  const ding = document.getElementById("ding");
+
+  // ⭐ 音效解鎖（使用者第一次點按任一按鈕）
+  function unlockSound() {
+    ding.muted = false;
+    ding.currentTime = 0;
+    ding.play().catch(()=>{});
+  }
+
+  function playBeep() {
+    ding.currentTime = 0;
+    ding.play().catch(()=>{});
+  }
+
+  const downBtn = document.getElementById('downBtn');
+  const upBtn = document.getElementById('upBtn');
+  const modeLabel = document.getElementById('modeLabel');
+  const nextTimeEl = document.getElementById('nextTime');
+  const countdownEl = document.getElementById('countdown');
+  const alertBox = document.getElementById('alert');
+
+  function showAlert() {
+    alertBox.classList.add('show');
+    if (alertTimeout) clearTimeout(alertTimeout);
+    alertTimeout = setTimeout(() => {
+      alertBox.classList.remove('show');
+    }, 2500);
+  }
+
+  function computeNextArrival(direction, fromDate) {
+    const baseMinute = direction === 'down' ? 0 : 2;
+    const d = new Date(fromDate.getTime());
+
+    let minutes = d.getMinutes();
+    let offset = ((minutes - baseMinute) % 4 + 4) % 4;
+
+    let candidate = new Date(d.getTime());
+    candidate.setSeconds(0, 0);
+    candidate.setMinutes(minutes + offset);
+
+    if (candidate.getTime() <= d.getTime()) {
+      candidate.setMinutes(candidate.getMinutes() + 4);
+    }
+
+    return candidate;
+  }
+
+  function formatTime(date) {
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  function updateUI() {
+    if (!nextArrival) return;
+    const now = new Date();
+    const diffMs = nextArrival.getTime() - now.getTime();
+    const diffSec = Math.max(0, Math.round(diffMs / 1000));
+
+    nextTimeEl.textContent = formatTime(nextArrival);
+    const m = Math.floor(diffSec / 60);
+    const s = diffSec % 60;
+    countdownEl.textContent = m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+  }
+
+  function tick() {
+    const now = new Date();
+    if (!nextArrival || now.getTime() >= nextArrival.getTime()) {
+      playBeep();
+      showAlert();
+      nextArrival = computeNextArrival(currentDirection, new Date(now.getTime() + 1000));
+    }
+    updateUI();
+  }
+
+  function startTimer() {
+    if (timer) clearInterval(timer);
+    nextArrival = computeNextArrival(currentDirection, new Date());
+    updateUI();
+    timer = setInterval(tick, 500);
+  }
+
+  function setDirection(dir) {
+    unlockSound();   // ⭐ 一定要放這裡：第一次切換方向時解鎖聲音
+
+    currentDirection = dir;
+    if (dir === 'down') {
+      downBtn.classList.add('active');
+      upBtn.classList.remove('active');
+      modeLabel.textContent = '下行（每小時 00 分起，每 4 分鐘）';
+    } else {
+      upBtn.classList.add('active');
+      downBtn.classList.remove('active');
+      modeLabel.textContent = '上行（每小時 02 分起，每 4 分鐘）';
+    }
+    startTimer();
+  }
+
+  downBtn.addEventListener('click', () => setDirection('down'));
+  upBtn.addEventListener('click', () => setDirection('up'));
+
+  // 預設啟動
+  setDirection('down');
+</script>
+
+</body>
+</html>
